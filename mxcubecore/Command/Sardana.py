@@ -478,6 +478,7 @@ class SardanaChannel(ChannelObject, SardanaObject):
         except Exception:
             import traceback
 
+            logging.getLogger("HWR").info("info initialized. Cannot get limits")
             logging.getLogger("HWR").info("%s" % traceback.format_exc())
         return self.info
 
