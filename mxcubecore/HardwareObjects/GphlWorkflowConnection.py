@@ -37,7 +37,7 @@ from py4j import clientserver, java_gateway
 from mxcubecore.utils import conversion
 from mxcubecore.HardwareObjects.Gphl import GphlMessages
 
-from mxcubecore.BaseHardwareObjects import HardwareObjectYaml
+from mxcubecore.BaseHardwareObjects import HardwareObject
 from mxcubecore import HardwareRepository as HWR
 
 # NB this is patching the original socket module in to avoid the
@@ -77,7 +77,7 @@ __license__ = "LGPLv3+"
 __author__ = "Rasmus H Fogh"
 
 
-class GphlWorkflowConnection(HardwareObjectYaml):
+class GphlWorkflowConnection(HardwareObject, object):
     """
     This HO acts as a gateway to the Global Phasing workflow engine.
     """
@@ -105,6 +105,10 @@ class GphlWorkflowConnection(HardwareObjectYaml):
         self.connection_parameters = {}
         self.software_paths = {}
         self.software_properties = {}
+        
+        # Properties for GPhL invocation
+        self.java_properties = {}
+
 
         self.update_state(self.STATES.UNKNOWN)
 
@@ -124,7 +128,7 @@ class GphlWorkflowConnection(HardwareObjectYaml):
         paths = self.software_paths
         properties = self.software_properties
 
-        for tag, val in paths.items():
+        for tag, val in dd0.items():
             val2 = val.format(**locations)
             if not os.path.isabs(val2):
                 val2 = HWR.get_hardware_repository().find_in_repository(val)
@@ -145,7 +149,8 @@ class GphlWorkflowConnection(HardwareObjectYaml):
                 val2 = HWR.get_hardware_repository().find_in_repository(val)
                 if val2 is None:
                     raise ValueError("File path %s not recognised" % val)
-            paths[tag] = properties[tag] = val2
+            #paths[tag] = properties[tag] = val2
+            paths[tag] = props[tag] = val2
 
         # Set master location, based on known release directory structure
         properties["co.gphl.wf.bin"] = os.path.join(locations["GPHL_INSTALLATION"], "exe")

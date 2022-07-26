@@ -38,6 +38,11 @@ try:
 except ImportError as ex:
     logging.getLogger("HWR").exception("Could not import HardwareRepository")
 
+try:
+    from collections import OrderedDict
+except ImportError:
+    from ordereddict import OrderedDict
+
 
 __copyright__ = """ Copyright © 2010 - 2020 by MXCuBE Collaboration """
 __license__ = "LGPLv3+"
@@ -1995,14 +2000,16 @@ class Workflow(TaskNode):
         return self.path_template
 
 
+
 class GphlWorkflow(TaskNode):
-    def __init__(self):
+    def __init__(self, workflow_hwobj):
         TaskNode.__init__(self)
 
         workflow_hwobj = HWR.beamline.gphl_workflow
 
         # Workflow start attributes
         self.path_template = PathTemplate()
+        self._name = str()
         self._type = str()
         self.shape = str()
         # string. Only active mode currently is 'MASSIF1'
@@ -2054,9 +2061,9 @@ class GphlWorkflow(TaskNode):
         self.strategy_length = 0.0
 
         self.set_requires_centring(False)
-
+        
         self.set_from_dict(workflow_hwobj.settings["defaults"])
-
+    
     def parameter_summary(self):
         """Main parameter summary, for output purposes"""
         summary = {"strategy":self.get_type()}
@@ -2315,7 +2322,7 @@ class GphlWorkflow(TaskNode):
                 radiation_sensitivity = diffraction_plan.radiationSensitivity
             else:
                 radiation_sensitivity = diffraction_plan.get("radiationSensitivity")
-
+                
             if radiation_sensitivity:
                 self.relative_rad_sensitivity = radiation_sensitivity
 
@@ -2428,6 +2435,7 @@ class GphlWorkflow(TaskNode):
         transmission = self.calculate_transmission()
         self.dose_budget = self.dose_budget * self.transmission / transmission
 
+
     def apply_dose_budget(self):
         """
         Apply dose budget, changing transmission, and (if necessary) also exposure time
@@ -2446,7 +2454,6 @@ class GphlWorkflow(TaskNode):
     def reset_transmission(self):
         """reset transmission to match current parameters, lowering dose budget if transmission goes over 100,
         reducing dose if transmission goes over 100
-
         NB intended for running in auto mode, or for changing exposure)time etc."""
         transmission = self.calculate_transmission()
         if transmission > 100.:

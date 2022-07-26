@@ -42,7 +42,7 @@ import f90nml
 
 from mxcubecore.dispatcher import dispatcher
 from mxcubecore.utils import conversion
-from mxcubecore.BaseHardwareObjects import HardwareObjectYaml
+from mxcubecore.BaseHardwareObjects import HardwareObject
 from mxcubecore.HardwareObjects import queue_model_objects
 from mxcubecore.HardwareObjects.queue_entry import QUEUE_ENTRY_STATUS
 from mxcubecore.HardwareObjects.queue_entry import QueueAbortedException
@@ -93,7 +93,7 @@ RECENTRING_MODES = OrderedDict(
 )
 
 
-class GphlWorkflow(HardwareObjectYaml):
+class GphlWorkflow(HardwareObject, object):
     """Global Phasing workflow runner.
     """
     SPECIFIC_STATES = GphlWorkflowStates
@@ -103,13 +103,16 @@ class GphlWorkflow(HardwareObjectYaml):
     def __init__(self, name):
         super(GphlWorkflow, self).__init__(name)
 
+        # HO that handles connection to GPhL workflow runner
+        self._workflow_connection = None
+
         # Needed to allow methods to put new actions on the queue
         # And as a place to get hold of other objects
         self._queue_entry = None
 
         # Configuration data - set when queried
-        self.workflows = {}
-        self.settings = {}
+        #self.workflows = {}
+        #self.settings = {}
 
         # Current data collection task group. Different for characterisation and collection
         self._data_collection_group = None
@@ -118,7 +121,7 @@ class GphlWorkflow(HardwareObjectYaml):
         self._return_parameters = None
 
         # Queue to read messages from GphlConnection
-        self._workflow_queue = None
+        #self._workflow_queue = None
 
         # Message - processing function map
         self._processor_functions = {}
@@ -138,11 +141,26 @@ class GphlWorkflow(HardwareObjectYaml):
         # Configurable file paths
         self.file_paths = {}
 
+        # Dose budget pulldown labels and default
+        self.dose_budgets = OrderedDict()
+        self.default_dose_budget_label = None
+
+        
     def _init(self):
         super(GphlWorkflow, self)._init()
 
     def init(self):
         super(GphlWorkflow, self).init()
+
+        # Get dose budget data
+        default_dose_budget_label = None
+        xx0 = next(self.get_objects("dose_budgets"))
+        for pulldown_item in xx0.get_objects("pulldown_item"):
+            dd0 = pulldown_item.get_properties()
+            self.dose_budgets[dd0["label"]] = float(dd0["value"])
+            if default_dose_budget_label is None or dd0.get("is_default"):
+                default_dose_budget_label = dd0["label"]
+        self.default_dose_budget_label = default_dose_budget_label
 
         # Set up processing functions map
         self._processor_functions = {
@@ -160,7 +178,14 @@ class GphlWorkflow(HardwareObjectYaml):
             "WorkflowCompleted": self.workflow_completed,
             "WorkflowFailed": self.workflow_failed,
         }
+        
+        self.update_state(self.STATES.READY)
 
+    def setup_workflow_object(self):
+        """Necessary as this set-up cannot be done at init,
+        when the hwobj are still incomplete. Must be called externally
+        TODO This still necessary?"""
+        
         # Set standard configurable file paths
         file_paths = self.file_paths
         ss0 = HWR.beamline.gphl_connection.software_paths["gphl_beamline_config"]
@@ -184,39 +209,37 @@ class GphlWorkflow(HardwareObjectYaml):
                 (instrument_data["det_org_x"], instrument_data["det_org_y"])
             )
 
-        # Adapt configuration data - must be done after file_paths setting
-        if HWR.beamline.gphl_connection.ssh_options:
-            # We are running workflow through ssh - set beamline url
-            beamline_hook ="py4j:%s:" % socket.gethostname()
-        else:
-            beamline_hook = "py4j::"
+        ## Adapt configuration data - must be done after file_paths setting
+        #if HWR.beamline.gphl_connection.ssh_options:
+            ## We are running workflow through ssh - set beamline url
+            #beamline_hook ="py4j:%s:" % socket.gethostname()
+        #else:
+            #beamline_hook = "py4j::"
 
-        # Consolidate workflow options
-        for title, workflow in self.workflows.items():
-            workflow["wfname"] = title
-            wftype = workflow["wftype"]
+        ## Consolidate workflow options
+        #for title, workflow in self.workflows.items():
+            #workflow["wfname"] = title
+            #wftype = workflow["wftype"]
 
-            opt0 = workflow.get("options", {})
-            opt0["beamline"] = beamline_hook
-            default_strategy_name = None
-            for strategy in workflow["strategies"]:
-                strategy["wftype"] = wftype
-                if default_strategy_name is None:
-                    default_strategy_name = workflow["strategy_name"] = (
-                        strategy["title"]
-                    )
-                dd0 = opt0.copy()
-                dd0.update(strategy.get("options", {}))
-                strategy["options"] = dd0
-                if workflow["wftype"] == "transcal":
-                    relative_file_path = strategy["options"].get("file")
-                    if relative_file_path is not None:
-                        # Special case - this option must be modified before use
-                        strategy["options"]["file"] = os.path.join(
-                            self.file_paths["gphl_beamline_config"], relative_file_path
-                        )
-
-        self.update_state(self.STATES.READY)
+            #opt0 = workflow.get("options", {})
+            #opt0["beamline"] = beamline_hook
+            #default_strategy_name = None
+            #for strategy in workflow["strategies"]:
+                #strategy["wftype"] = wftype
+                #if default_strategy_name is None:
+                    #default_strategy_name = workflow["strategy_name"] = (
+                        #strategy["title"]
+                    #)
+                #dd0 = opt0.copy()
+                #dd0.update(strategy.get("options", {}))
+                #strategy["options"] = dd0
+                #if workflow["wftype"] == "transcal":
+                    #relative_file_path = strategy["options"].get("file")
+                    #if relative_file_path is not None:
+                        ## Special case - this option must be modified before use
+                        #strategy["options"]["file"] = os.path.join(
+                            #self.file_paths["gphl_beamline_config"], relative_file_path
+                        #)
 
     def shutdown(self):
         """Shut down workflow and connection. Triggered on program quit."""
@@ -227,7 +250,96 @@ class GphlWorkflow(HardwareObjectYaml):
 
     def get_available_workflows(self):
         """Get list of workflow description dictionaries."""
-        return copy.deepcopy(self.workflows)
+        result = OrderedDict()
+        if self.has_object("workflow_properties"):
+            properties = self["workflow_properties"].get_properties().copy()
+        else:
+            properties = {}
+        if self.has_object("invocation_properties"):
+            invocation_properties = (
+                self["invocation_properties"].get_properties().copy()
+            )
+        else:
+            invocation_properties = {}
+
+        if self.has_object("all_workflow_options"):
+            all_workflow_options = self["all_workflow_options"].get_properties().copy()
+            if "beamline" in all_workflow_options:
+                pass
+            elif HWR.beamline.gphl_connection.has_object("ssh_options"):
+                # We are running workflow through ssh - set beamline url
+                all_workflow_options["beamline"] = "py4j:%s:" % socket.gethostname()
+            else:
+                all_workflow_options["beamline"] = "py4j::"
+        else:
+            all_workflow_options = {}
+
+        acq_workflow_options = all_workflow_options.copy()
+        acq_workflow_options.update(self["acq_workflow_options"].get_properties())
+        # Add options for target directories:
+        process_root = HWR.beamline.session.get_base_process_directory()
+        acq_workflow_options["appdir"] = process_root
+
+        mx_workflow_options = acq_workflow_options.copy()
+        mx_workflow_options.update(self["mx_workflow_options"].get_properties())
+
+        for wf_node in self["workflows"]:
+            name = wf_node.name()
+            strategy_type = wf_node.get_property("strategy_type")
+            wf_dict = {
+                "name": name,
+                "strategy_type": strategy_type,
+                "application": wf_node.get_property("application"),
+                "documentation": wf_node.get_property(
+                    "documentation", default_value=""
+                ),
+                "interleaveOrder": wf_node.get_property(
+                    "interleave_order", default_value=""
+                ),
+            }
+            result[name] = wf_dict
+
+            if strategy_type.startswith("transcal"):
+                wf_dict["options"] = dd0 = all_workflow_options.copy()
+                if wf_node.has_object("options"):
+                    dd0.update(wf_node["options"].get_properties())
+                    relative_file_path = dd0.get("file")
+                    if relative_file_path is not None:
+                        # Special case - this option must be modified before use
+                        dd0["file"] = os.path.join(
+                            self.file_paths["gphl_beamline_config"], relative_file_path
+                        )
+
+            elif strategy_type.startswith("diffractcal"):
+                wf_dict["options"] = dd0 = acq_workflow_options.copy()
+                if wf_node.has_object("options"):
+                    dd0.update(wf_node["options"].get_properties())
+
+            else:
+                wf_dict["options"] = dd0 = mx_workflow_options.copy()
+                if wf_node.has_object("options"):
+                    dd0.update(wf_node["options"].get_properties())
+                if wf_node.has_object("beam_energies"):
+                    wf_dict["beam_energies"] = dd0 = OrderedDict()
+                    for wavelength in wf_node["beam_energies"]:
+                        dd0[wavelength.get_property("role")] = wavelength.get_property(
+                            "value"
+                        )
+
+            wf_dict["properties"] = dd0 = properties.copy()
+            if wf_node.has_object("properties"):
+                dd0.update(wf_node["properties"].get_properties())
+            # Program-specific properties
+            devmode = dd0.get("co.gphl.wf.devMode")
+            if devmode and devmode[0] not in "fFnN":
+                # We are in developer mode. Add parameters
+                dd0["co.gphl.wf.stratcal.opt.--strategy_type"] = strategy_type
+
+            wf_dict["invocation_properties"] = dd0 = invocation_properties.copy()
+            if wf_node.has_object("invocation_properties"):
+                dd0.update(wf_node["invocation_properties"].get_properties())
+        #
+        return result
 
     def query_pre_strategy_params(self, data_model, choose_lattice=None):
         """
@@ -276,41 +388,46 @@ class GphlWorkflow(HardwareObjectYaml):
 
     def execute(self):
 
-        if HWR.beamline.gphl_connection is None:
-            raise RuntimeError(
-                "Cannot execute workflow - GphlWorkflowConnection not found"
-            )
+        try:
+            self.update_state(self.STATES.BUSY)
 
-        # Fork off workflow server process
-        HWR.beamline.gphl_connection.start_workflow(
-            self._workflow_queue, self._queue_entry.get_data_model()
-        )
-
-        while True:
-            if self._workflow_queue is None:
-                # We can only get that value if we have already done post_execute
-                # but the mechanics of aborting means we conme back
-                # Stop further processing here
-                raise QueueAbortedException("Aborting...", self)
-
-            tt0 = self._workflow_queue.get()
-            if tt0 is StopIteration:
-                logging.getLogger("HWR").debug("GPhL queue StopIteration")
-                break
-
-            message_type, payload, correlation_id, result_list = tt0
-            func = self._processor_functions.get(message_type)
-            if func is None:
-                logging.getLogger("HWR").error(
-                    "GPhL message %s not recognised by MXCuBE. Terminating...",
-                    message_type,
+            workflow_queue = gevent._threading.Queue()
+            # Fork off workflow server process
+            if HWR.beamline.gphl_connection is not None:
+                HWR.beamline.gphl_connection.start_workflow(
+                    workflow_queue, self._queue_entry.get_data_model()
                 )
-                break
-            elif message_type != "String":
-                logging.getLogger("HWR").info("GPhL queue processing %s", message_type)
-                response = func(payload, correlation_id)
-                if result_list is not None:
-                    result_list.append((response, correlation_id))
+
+            while True:
+                while workflow_queue.empty():
+                    time.sleep(0.1)
+
+                tt0 = workflow_queue.get_nowait()
+                if tt0 is StopIteration:
+                    break
+
+                message_type, payload, correlation_id, result_list = tt0
+                func = self._processor_functions.get(message_type)
+                if func is None:
+                    logging.getLogger("HWR").error(
+                        "GPhL message %s not recognised by MXCuBE. Terminating...",
+                        message_type,
+                    )
+                    break
+                else:
+                    logging.getLogger("HWR").info(
+                        "GPhL queue processing %s", message_type
+                    )
+                    response = func(payload, correlation_id)
+                    if result_list is not None:
+                        result_list.append((response, correlation_id))
+
+        except Exception:
+            self.workflow_end()
+            logging.getLogger("HWR").error(
+                "Uncaught error during GPhL workflow execution", exc_info=True
+            )
+            raise
 
     def post_execute(self):
         """
