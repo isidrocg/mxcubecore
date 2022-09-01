@@ -508,7 +508,7 @@ class HardwareObjectMixin(CommandContainer):
             cmd = getattr(self, cmd_name)
             cmd(**args)
         else:
-            self.log.info(f"Command {cmd} not exported, check type hints and configuration file")
+            self.log.info("Command {cmd_name} not exported, check type hints and configuration file")
 
     @property
     def pydantic_model(self):
