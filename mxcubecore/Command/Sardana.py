@@ -49,7 +49,7 @@ import PyTango
 # from mxcubecore.TaskUtils import task
 
 try:
-    from sardana.taurus.core.tango.sardana import registerExtensions
+    #from sardana.taurus.core.tango.sardana import registerExtensions
     from taurus import Device, Attribute
     import taurus
     from taurus.core.tango.enums import DevState
@@ -390,6 +390,16 @@ class SardanaChannel(ChannelObject, SardanaObject):
         self.info.minval = None
         self.info.maxval = None
 
+        self.taurus_major_version = None
+        if hasattr(taurus.Release, "version_info"):
+            self.taurus_major_version  = int(taurus.Release.version_info[0]) 
+        elif hasattr(taurus.Release, "version"):
+            self.taurus_major_version  = int(taurus.Release.version[0])
+        if self.taurus_major_version: 
+            #logging.getLogger("HWR").info("Taurus major version is %d" % self.taurus_major_version)
+            pass
+        else: logging.getLogger("HWR").error("Taurus major version cannot be verified")
+
         self.init_device()
 
     def init_device(self):
@@ -415,16 +425,16 @@ class SardanaChannel(ChannelObject, SardanaObject):
         # read information
         if "Position" in str(self.attribute): # RB: quick hack, find a better way to check if this channel is a position channel
             try:
-                if taurus.Release.version_info[0] == 3:
+                if self.taurus_major_version == 3:
                     ranges = self.attribute.getConfig().getRanges()
                     if ranges is not None and ranges[0] != "Not specified":
                         self.info.minval = float(ranges[0])
                     if ranges is not None and ranges[-1] != "Not specified":
                         self.info.maxval = float(ranges[-1])
-                elif taurus.Release.version_info[0] > 3:  # taurus 4 and beyond
+                elif self.taurus_major_version  > 3:  # taurus 4 and beyond
                     minval, maxval = self.attribute.getRanges()
-                    print self.attribute
-                    print str(self.attribute.getRanges())
+                    #print self.attribute
+                    #print str(self.attribute.getRanges())
                     self.info.minval = minval.magnitude
                     self.info.maxval = maxval.magnitude
             except Exception:
@@ -453,9 +463,10 @@ class SardanaChannel(ChannelObject, SardanaObject):
 
     def _read_value(self):
         value = None
-        if taurus.Release.version_info[0] == 3:
+        major_version = None
+        if self.taurus_major_version  == 3:
             value = self.attribute.read().value
-        elif taurus.Release.version_info[0] > 3:  # taurus 4 and beyond
+        elif self.taurus_major_version  > 3:  # taurus 4 and beyond
             try:
                 magnitude = getattr(self.attribute.rvalue, 'magnitude')
                 value = magnitude
@@ -465,17 +476,22 @@ class SardanaChannel(ChannelObject, SardanaObject):
 
     def get_info(self):
         try:
-            if taurus.Release.version_info[0] == 3:
+            #logging.getLogger("HWR").info("Taurus major version is %d" % self.taurus_major_version)
+            if self.taurus_major_version == 3:
                 ranges = self.attribute.getConfig().getRanges()
                 if ranges is not None and ranges[0] != "Not specified":
                     self.info.min_val = float(ranges[0])
                 if ranges is not None and ranges[-1] != "Not specified":
                     self.info.max_val = float(ranges[-1])
-            elif taurus.Release.version_info[0] > 3:   # taurus 4 and beyond
+            elif self.taurus_major_version  > 3:   # taurus 4 and beyond
                 range = getattr(self.attribute, 'range')
                 self.info.min_val = range[0].magnitude
                 self.info.max_val = range[1].magnitude
-        except Exception:
+                #logging.getLogger("HWR").info("info initialized, ranges: %s to %s" % 
+                                              #( str(self.info.min_val), str(self.info.max_val) )
+                #)
+                
+        except Exception as e:
             import traceback
 
             logging.getLogger("HWR").info("info initialized. Cannot get limits")
