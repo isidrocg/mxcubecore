@@ -1,0 +1,28 @@
+<device class = "XalocSerialPump">
+
+  <username>PUMP</username>
+  <tangoname>bl13/eh/shimadzu_pump</tangoname>
+  <!-- Atributes -->
+  <!-- (most ot them will be changed in the gui, only for testing) -->
+  <setpoint>10</setpoint>
+  <min_flow>0.0001</min_flow>
+  <max_flow>0.5</max_flow>
+  <max_press>26</max_press>
+  <samp_vol></samp_vol>
+  <capillary_id>50</capillary_id>
+  <reservoir>40</reservoir>
+  
+  <!-- Channels -->
+  <channel type="tango" polling="500" name="PumpFlow">flow</channel>
+  <channel type="tango" polling="500" name="PumpPressure">pressure</channel>
+  <!-- Deduced pressure units: {0: 'bar', 1: 'psi', 2: 'Mpa', 3: 'kgf/cm2'}  -->
+  <channel type="tango" polling="500" name="PumpPressureUnit">pressure_unit</channel>
+  <channel type="tango" polling="500" name="PumpPumping">pumping</channel>
+
+
+  <!-- Commands -->
+  <command type="tango" name="_cmdStartPumping">Start</command>
+  <command type="tango" name="_cmdStopPumping">Stop</command>
+
+  
+</device>
