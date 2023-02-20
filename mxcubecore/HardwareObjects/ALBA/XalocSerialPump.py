@@ -27,6 +27,7 @@ HwObj used to control Shimadzu pump for SSX
 from __future__ import print_function
 
 import logging
+import math
 
 # from mxcubecore.BaseHardwareObjects import Device
 from mxcubecore.BaseHardwareObjects import HardwareObject
@@ -84,10 +85,7 @@ class XalocSerialPump(HardwareObject):
         elif self.reservoir == 20:
             self.amp_factor = 34
 
-        ## Capillary area in mm2, convert self.capillary_id to radius in mm
-        #self.capillary_area = math.pi * ((self.capillary_id / 2) / 1000) ** 2
-        #self.sample_vol_ul = 40 # TODO Set this from the ui, check how to
-        #self.samp_vol_nl = self.sample_vol_ul * 1000000
+        
 
         ## Initialize pumped_volume and previous time
         #self.pumped_volume = 0
@@ -138,6 +136,36 @@ class XalocSerialPump(HardwareObject):
 
         """
         return self.channelflow.get_value() * 1000
+
+    def get_jet_speed(self, pump_flow, reservoir, capillary_id):
+        """
+        Given the pump_flow in ul/min, the reservoir used (40 or 20 ul) and the
+        capillary id (in um), get the jet speed in micrometers per second.
+
+        Returns: float
+
+        """
+        # Pump amplification factor:
+        if reservoir == 40:
+            amp_factor = 14
+        elif reservoir == 20:
+            amp_factor = 34
+
+        # Convert pump speed (ul/min) to extruder speed (ul/s) 
+        extruder_speed = pump_flow / (amp_factor * 60)
+
+        # Capillary area in um2
+        capillary_area = math.pi * (capillary_id / 2) ** 2
+
+        # Jet speed:
+        # extruder_speed (ES) is volume per unit of time,
+        # Volume is Area * Height, jet speed will be the height per unit of time
+        # so ES = V/s, V = A*h -> h = V/A. Jet speed (JS) is then 
+        # JS = h/s = ES/A. Apply factor 1E9 to get um/s
+        jet_speed = extruder_speed * 1E9 / capillary_area
+
+        return round(jet_speed, 2)
+
     
     #def getPumping(self):
         #"""
