@@ -5,8 +5,8 @@
   <!-- Atributes -->
   <!-- (most ot them will be changed in the gui, only for testing) -->
   <setpoint>10</setpoint>
-  <min_flow>0.0001</min_flow>
-  <max_flow>0.5</max_flow>
+  <min_flow>0.1</min_flow>
+  <max_flow>10</max_flow>
   <max_press>26</max_press>
   <samp_vol></samp_vol>
   <capillary_id>50</capillary_id>

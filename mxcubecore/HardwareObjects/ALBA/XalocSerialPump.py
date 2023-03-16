@@ -70,20 +70,20 @@ class XalocSerialPump(HardwareObject):
 
         # Properties for PID control. Instead of properties in xml, read them
         # from the ui for live control
-        self.max_flow = self.get_property("max_flow")
+        # self.max_flow = self.get_property("max_flow")
         self.min_flow = self.get_property("min_flow")
         self.max_pressure = self.get_property("max_press")
-        self.set_point = self.get_property("setpoint")
+        # self.set_point = self.get_property("setpoint")
         
 
 
         # Properties for sample consumption and jet speed calculation
-        self.capillary_id = self.get_property("capillary_id")
-        self.reservoir = self.get_property("reservoir")
-        if self.reservoir == 40:
-            self.amp_factor = 14
-        elif self.reservoir == 20:
-            self.amp_factor = 34
+        # self.capillary_id = self.get_property("capillary_id")
+        # self.reservoir = self.get_property("reservoir")
+        # if self.reservoir == 40:
+        #     self.amp_factor = 14
+        # elif self.reservoir == 20:
+        #     self.amp_factor = 34
 
         
 
@@ -102,7 +102,7 @@ class XalocSerialPump(HardwareObject):
         self.channelunit = self.get_channel_object("PumpPressureUnit")
         if self.channelunit is not None:
             self.connect(self.channelunit, "update", self.unit_changed)
-            self.pressure_unit = self.channelunit.get_value()
+            # self.pressure_unit = self.channelunit.get_value()
             
         self.channelpressure = self.get_channel_object("PumpPressure")
         if self.channelpressure is not None:
@@ -273,43 +273,56 @@ class XalocSerialPump(HardwareObject):
         self.logger.debug("unit_changed: unitChanged emitted ({})".format(value))
         self.pressure_unit = value
 
-    #def update_values(self, value):
-        ## We re-emit the channel value received in the event to any Qt client
-        #flow = self.getFlow()
-        #self.emit('flowChanged', flow)
-        ##self.emit('test', flow)
-        #self.logger.debug("update_values: flowChanged emitted ({})".format(flow))
+    def update_values(self):
+        # We re-emit the channel value received in the event to any Qt client
+        flow = self.getFlow()
+        self.emit('flowChanged', flow)
         
-        #pressure = self.getPressure()
-        #self.emit('pressureChanged', pressure)
-        #self.logger.debug("pressureChanged emitted ({})".format(pressure))
-        
-        #do a self emit with an array of the values, capture this in brick 
-        #set_value(self, value) to proccess with only one signal
+        pressure = self.channelpressure.get_value()
+        pressure_bar = self.getPressure(pressure)
+        self.emit('pressureChanged', pressure)
 
-    def flow_control(self, pressure):
+        pumping = self.channelpumping.get_value()
+        self.emit('pumpingChanged', pumping)
+        
+
+    def flow_control(self, pressure, target_pressure, max_flow, kp):
+        '''
+        '''
         self.logger.debug("Flow control activated")
-        Kp = 0.01
-        MV_bar = self.getFlow()
-        SP = self.set_point
+        # Kp = 0.01
+        Kp = kp
+        MV_bar = self.getFlow() # in ul/min
+        # SP = self.set_point
+        SP = target_pressure
         PV = pressure
         
         e = SP - PV
         P = Kp*e
-        MV = MV_bar + P
+        MV = (MV_bar + P)
+
+        self.logger.debug("MV_bar = %s" % str(MV_bar))
+        self.logger.debug("SP = %s" % str(SP))
+        self.logger.debug("PV = %s" % str(PV))
+        self.logger.debug("Kp = %s" % str(Kp))
+        self.logger.debug("P = %s" % str(P))
+        self.logger.debug("MV = %s" % str(MV))
         
-        if MV > self.max_flow:
-            MV = self.max_flow
+        # if MV > self.max_flow:
+        #     MV = self.max_flow
+        if MV > max_flow:
+            MV = max_flow
         elif MV < self.min_flow:
             MV = self.min_flow
         
         self.logger.debug("Flow control: new_flow = %s" % str(MV))
         #self.channelflow.setValue(0.001)
-        self.channelflow.set_value(MV)
+        # self.channelflow.set_value(MV)
+        self.set_flow(MV)
 
-    def set_flow(ul_min):
+    def set_flow(self, ul_min):
 
-        self.channelflow.set_value(ul_min * 1000) 
+        self.channelflow.set_value(ul_min / 1000) 
         
 
     #def _pid(self, Kp, Ki, Kd, MV_bar=0):
