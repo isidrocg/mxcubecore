@@ -49,6 +49,7 @@ class XalocSerialPump(HardwareObject):
         self.max_pressure = None
         self.set_point = None
         self.flow = None
+        self.sample_vol = None
         
         self.capillary_id = None
         self.reservoir = None
@@ -260,6 +261,11 @@ class XalocSerialPump(HardwareObject):
         #self.logger.debug("pressure_changed: value ({})".format(value))
         self.emit('pressureChanged', pressure_bar) # Check here the units and emit always in bar
         # self.logger.debug("pressure_changed: pressureChanged emitted ({})".format(pressure_bar))
+
+        # Stop pump before hardware alarm/stop, prevent manual intervention
+        if pressure_bar > 28:
+            self._cmdStopPumping()
+            self.logger.debug("High pressure ({}), stopping pump".format(pressure_bar))
         
             
     def pumping_changed(self, value):
@@ -280,7 +286,7 @@ class XalocSerialPump(HardwareObject):
         
         pressure = self.channelpressure.get_value()
         pressure_bar = self.getPressure(pressure)
-        self.emit('pressureChanged', pressure)
+        self.emit('pressureChanged', pressure_bar)
 
         pumping = self.channelpumping.get_value()
         self.emit('pumpingChanged', pumping)
@@ -322,7 +328,22 @@ class XalocSerialPump(HardwareObject):
 
     def set_flow(self, ul_min):
 
-        self.channelflow.set_value(ul_min / 1000) 
+        self.channelflow.set_value(ul_min / 1000)
+
+    def consumed_sample(self):
+        '''
+        '''
+        if self.sample_vol:
+            flow = self.getFlow()
+            previous_time = self.time
+            time_now = time.perf_counter()
+            delta_minutes = (time_now - previous_time) / 60
+
+            volume = flow * delta_minutes
+
+            self.time = time_now
+            self.sample_vol -= volume
+
         
 
     #def _pid(self, Kp, Ki, Kd, MV_bar=0):
